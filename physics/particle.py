@@ -14,13 +14,19 @@ class ColorAnimation:
                 c1, life1 = colors[i]
                 c2, life2 = colors[i + 1]
 
+                if len(c1) < 4:
+                    c1 = (*c1, 255)
+                if len(c2) < 4:
+                    c2 = (*c2, 255)
+
                 frames = life1 * 10
                 for j in range(frames):
                     perc = j / frames
                     color = (
                         c1[0] * (1 - perc) + c2[0] * perc,
                         c1[1] * (1 - perc) + c2[1] * perc,
-                        c1[2] * (1 - perc) + c2[2] * perc
+                        c1[2] * (1 - perc) + c2[2] * perc,
+                        c1[3] * (1 - perc) + c2[3] * perc
                     )
                     self.colors.append(color)
 
@@ -99,7 +105,7 @@ class Firework(Particle):
 
     def splode(self):
 
-        color_gen = ColorAnimation(((255, 0, 0), 4), ((255, 255, 0), 0))
+        color_gen = ColorAnimation(((255, 0, 0), 4), ((255, 255, 0), 2), ((255, 255, 255, 0), 0))
 
         for i in range(self.explosion_size):
             angle, velocity = random() * 2 * pi, random() * 100
