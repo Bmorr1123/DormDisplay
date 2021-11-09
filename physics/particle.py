@@ -87,14 +87,20 @@ class Particle:
     surf = property(get_surf)
 
 class Firework(Particle):
-    def __init__(self, position, velocity, size, explosion_time, explosion_size, acceleration, particles):
-        color_generator = ColorAnimation(((255, 255, 255), 0))
+    def __init__(self, position, velocity, size, explosion_time, explosion_size, acceleration, particles, color_generator=None, tier=0):
+        if not color_generator:
+            color_generator = ColorAnimation(((255, 255, 255), 0))
         super().__init__(position, velocity, size, explosion_time, color_generator, True)
         self.particles = particles
 
         self.explosion_size = explosion_size
 
+        if acceleration == -1:
+            self.gravity = Vector2(0, 0)
+            acceleration = 0
         self.acceleration = Vector2(0, -acceleration)
+
+        self.tier = tier
 
     def tick(self, delta):
         self.velocity += self.acceleration * delta
@@ -105,15 +111,32 @@ class Firework(Particle):
 
     def splode(self):
 
-        color_gen = ColorAnimation(((255, 0, 0), 4), ((255, 255, 0), 2), ((255, 255, 255, 0), 0))
+        def random_color():
+            r, g, b = 0, 0, 0
+            while r + g + b < 255 * 1.5:
+                r, g, b = random() * 255, random() * 255, random() * 255
+            return r, g, b
+        # color_gen = ColorAnimation(((255, 0, 0), 4), ((255, 255, 0), 2), ((255, 255, 255, 0), 0))
+        if self.tier == 0:
+            color_gen = ColorAnimation((random_color(), 4), (random_color(), 6), (random_color(), 1), (random_color(), 2), ((255, 255, 255, 0), 0))
 
-        for i in range(self.explosion_size):
-            angle, velocity = random() * 2 * pi, random() * 100
-            self.particles.append(Particle(
-                self.position,
-                Vector2(cos(angle) * velocity, sin(angle) * velocity),
-                int(random() * 5), 3, color_gen
-            ))
+            for i in range(self.explosion_size):
+                angle, velocity = random() * 2 * pi, random() * 100
+                self.particles.append(Particle(
+                    self.position,
+                    Vector2(cos(angle) * velocity, sin(angle) * velocity),
+                    int(random() * 5), 3 + random(), color_gen
+                ))
+        elif self.tier > 0:
+            color_gen = ColorAnimation((random_color(), 5), ((*random_color(), 255), 0))
+
+            for i in range(self.explosion_size):
+                angle, velocity = random() * 2 * pi, random() * 100
+                self.particles.append(Firework(
+                    self.position,
+                    Vector2(cos(angle) * velocity, sin(angle) * velocity),
+                    int(random() * 5), 2, int(15 + random() * 10), -1, self.particles, color_gen, self.tier - 1
+                ))
 
     # TODO: Come up with a better idea how to randomly generate colors to switch between
     possible_colors = {
