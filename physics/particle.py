@@ -75,14 +75,18 @@ class Particle:
         return int(self.position.y)
 
     def get_surf(self):
-        color = self.color_generator.get_color(self.life / self.max_life)
+        color = self.color
         if color != self.last_color:
             self._surf.fill(color)
             self.last_color = color
         return self._surf
 
+    def get_color(self):
+        return self.color_generator.get_color(self.life / self.max_life)
+
     x = property(get_x)
     y = property(get_y)
+    color = property(get_color)
 
     surf = property(get_surf)
 

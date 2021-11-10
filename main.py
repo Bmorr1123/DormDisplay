@@ -1,12 +1,16 @@
 # main.py
 # Ben Morrison
-
+import os
 
 import pygame, math, random, pygame.gfxdraw
 from random import randint, random
 from physics.particle import *
 from physics.bouncer import *
 from pprint import pprint as pp
+
+# Imports for gif
+from PIL import Image
+import glob
 
 # Pygame setup and application stuff
 game_name = "DVD Logo"
@@ -28,7 +32,7 @@ def screensaver():
     particles = []
     bouncer = Bouncer((center_x, center_y), Vector2(width - randint(0, 100), height - randint(0, 100)) / 10, "uah_logo.png")
 
-    draw_bloom, recording = False, False
+    draw_bloom, recording = False, None
     partition_size = 20
     neighborhood = []
     for y in range(9):
@@ -70,7 +74,31 @@ def screensaver():
                 elif key == pygame.K_F12:
                     if not recording:
                         frames = 0
-                    recording = not recording
+                        recording = "recordings\\" + "".join(["abcdefghijklmnopqrstuvwxyz"[randint(0, 25)] for _ in range(10)])
+                        os.mkdir(recording)
+                    else:
+                        # Load up the frames
+                        frames = []
+                        imgs = glob.glob(f"{recording}/*.png")
+                        for i in imgs:
+                            new_frame = Image.open(i)
+                            frames.append(new_frame)
+
+                        # Save into a GIF file that loops forever
+                        frames[0].save(f'{recording}.gif', format='GIF',
+                                       append_images=frames[1:],
+                                       save_all=True,
+                                       optimize=True,
+                                       duration=16, loop=1, quality=90)
+
+                        # Remove the old frames
+                        for i in imgs:
+                            os.remove(i)
+
+                        # Remove the empty frames directory
+                        os.rmdir(recording)
+
+                        recording = None
 
             elif event.type == pygame.KEYDOWN:
                 pass
@@ -113,7 +141,7 @@ def screensaver():
                 if 0 <= pos.x < width and 0 <= pos.y < height:
                     particle_map[int(pos.x // partition_size)][int(pos.y // partition_size)].append(particle)
 
-        # Bloom
+        # ---------------------------------------------------------------------------------------------------- Bloom ---
         if draw_bloom:
             bloom_surf = pygame.Surface((width, height), pygame.SRCALPHA)
             p_width, p_height = int(width // partition_size), int(height // partition_size)
@@ -137,17 +165,21 @@ def screensaver():
                             pos = Vector2(partition_x * partition_size + x, partition_y * partition_size + y)
 
                             # Finding minimum distance from a particle
-                            min_dist = width
+                            min_dist, closest_part = width, None
                             for particle in nearby_particles:
                                 part_pos = particle.position + (particle.size / 2)
-                                min_dist = min((part_pos - pos).magnitude(), min_dist)
-                            min_dist = int(min_dist)
+                                dist = (part_pos - pos).magnitude()
+                                if dist < min_dist:
+                                    min_dist = dist
+                                    closest_part = particle
+
+                            min_dist = min_dist
 
                             intensity = 1
                             if min_dist != 0:
                                 intensity = 100 / (min_dist ** 2)
 
-                            color = [255 for _ in range(3)] + [min(255, 255 * intensity)]
+                            color = [closest_part.color[i] for i in range(3)] + [min(255, 255 // 8 * intensity)]
                             # print(color)
                             bloom_surf.set_at((int(pos.x), int(pos.y)), color)
                             # win.set_at((int(pos.x), int(pos.y)), (255, 0, 0))
@@ -158,8 +190,8 @@ def screensaver():
                                     f"fps: {1/max(deltas):.2f} < {1/avg_delta:.2f} < {1/min(deltas):.2f}",
                                     spacing=15), (0, 0))
 
-        if recording:
-            pygame.image.save(win, f"frames/frame_{frames}.png")
+        if not paused and recording:
+            pygame.image.save(win, f"{recording}/frame_{frames:010}.png")
             frames += 1
 
         pygame.display.update()
