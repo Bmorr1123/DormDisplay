@@ -1,6 +1,6 @@
 # main.py
 # Ben Morrison
-import os
+import os, time
 
 import pygame, math, random, pygame.gfxdraw
 from random import randint, random
@@ -25,7 +25,7 @@ pygame.display.set_caption(game_name)
 # Functions
 def screensaver():
     # Setting up loop variables
-    running, paused, time, frames = True, False, 0, 0
+    running, paused, total_time, frames = True, False, 0, 0
     deltas = [.1 for _ in range(10)]
 
     # Load data
@@ -33,11 +33,11 @@ def screensaver():
     bouncer = Bouncer((center_x, center_y), Vector2(width - randint(0, 100), height - randint(0, 100)) / 10, "uah_logo.png")
 
     draw_bloom, recording = False, None
-    partition_size = 20
+    partition_size, neighborhood_size = 20, 3
     neighborhood = []
-    for y in range(9):
-        for x in range(9):
-            neighborhood.append((x - 4, y - 4))
+    for y in range(neighborhood_size):
+        for x in range(neighborhood_size):
+            neighborhood.append((x - neighborhood_size // 2, y - neighborhood_size // 2))
 
     while running:
         delta = clock.tick(60) / 1000
@@ -109,7 +109,7 @@ def screensaver():
         avg_delta = sum(deltas) / 10
 
         if not paused:
-            time += delta
+            total_time += delta
             for particle in particles:
                 particle.tick(delta)
                 pos = particle.position
@@ -128,6 +128,7 @@ def screensaver():
             bouncer.tick(delta)
 
         # Drawing
+        render_time = time.time()
         win.fill((0, 0, 50))
         # win.blit(bouncer.surf, bouncer.position)
 
@@ -173,8 +174,6 @@ def screensaver():
                                     min_dist = dist
                                     closest_part = particle
 
-                            min_dist = min_dist
-
                             intensity = 1
                             if min_dist != 0:
                                 intensity = 100 / (min_dist ** 2)
@@ -187,7 +186,8 @@ def screensaver():
             win.blit(bloom_surf, (0, 0))
 
         win.blit(surf.generate_text(f"Particle count: {len(particles)}\n"
-                                    f"fps: {1/max(deltas):.2f} < {1/avg_delta:.2f} < {1/min(deltas):.2f}",
+                                    f"fps: {1 / max(deltas):.2f} < {1 / avg_delta:.2f} < {1 / min(deltas):.2f}\n"
+                                    f"render total_time: {time.time() - render_time:03.3f}",
                                     spacing=15), (0, 0))
 
         if not paused and recording:
