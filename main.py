@@ -1,6 +1,6 @@
 # main.py
 # Ben Morrison
-import os
+import os, time as tim
 
 import pygame, math, random, pygame.gfxdraw
 from random import randint, random
@@ -12,6 +12,9 @@ from pprint import pprint as pp
 from PIL import Image
 import glob
 
+# Imports for mp
+import pickle
+
 # Pygame setup and application stuff
 game_name = "DVD Logo"
 pygame.init()
@@ -19,7 +22,7 @@ display, clock = pygame.display.Info(), pygame.time.Clock()
 width, height = display.current_w // 2, display.current_h // 2
 center_x, center_y = width // 2, height // 2
 win = pygame.display.set_mode((width, height))
-pygame.display.set_caption(game_name)
+pygame.display.set_caption(f"{game_name} {width}x{height}")
 
 
 # Functions
@@ -33,11 +36,14 @@ def screensaver():
     bouncer = Bouncer((center_x, center_y), Vector2(width - randint(0, 100), height - randint(0, 100)) / 10, "uah_logo.png")
 
     draw_bloom, recording = False, None
+    logging = False
     partition_size = 20
+
+    neighborhood_size = 5
     neighborhood = []
-    for y in range(9):
-        for x in range(9):
-            neighborhood.append((x - 4, y - 4))
+    for y in range(neighborhood_size):
+        for x in range(neighborhood_size):
+            neighborhood.append((x - neighborhood_size//2, y - neighborhood_size//2))
 
     while running:
         delta = clock.tick(60) / 1000
@@ -99,6 +105,8 @@ def screensaver():
                         os.rmdir(recording)
 
                         recording = None
+                elif key == pygame.K_F11:
+                    logging = not logging
 
             elif event.type == pygame.KEYDOWN:
                 pass
@@ -128,6 +136,7 @@ def screensaver():
             bouncer.tick(delta)
 
         # Drawing
+        render_time = tim.time()
         win.fill((0, 0, 50))
         # win.blit(bouncer.surf, bouncer.position)
 
@@ -136,14 +145,20 @@ def screensaver():
             win.blit(particle.surf, particle.position)
 
             # Bloom stuff
-            if draw_bloom:
-                pos = particle.position
-                if 0 <= pos.x < width and 0 <= pos.y < height:
-                    particle_map[int(pos.x // partition_size)][int(pos.y // partition_size)].append(particle)
+            pos = particle.position + (particle.size / 2)
 
+            if 0 <= pos.x < width and 0 <= pos.y < height:
+                particle_map[int(pos.x // partition_size)][int(pos.y // partition_size)].append(
+                    [[int(pos.x * 100) / 100, int(pos.y * 100) / 100], [int(value * 100) / 100 for value in particle.color]]
+                )
+        # print("-----------------------------------------------")
+        # print(",\n".join([str(ele) for ele in particle_map]))
         # ---------------------------------------------------------------------------------------------------- Bloom ---
+
         if draw_bloom:
             bloom_surf = pygame.Surface((width, height), pygame.SRCALPHA)
+            # print("-----------------------------------")
+            # print(",\n".join(f"[{', '.join([str(ele2) for ele2 in ele])}]" for ele in pygame.surfarray.pixels3d(bloom_surf)))
             p_width, p_height = int(width // partition_size), int(height // partition_size)
 
             # Looping through each partition L -> R then T -> B
@@ -166,20 +181,18 @@ def screensaver():
 
                             # Finding minimum distance from a particle
                             min_dist, closest_part = width, None
-                            for particle in nearby_particles:
-                                part_pos = particle.position + (particle.size / 2)
-                                dist = (part_pos - pos).magnitude()
+                            for part_pos, color in nearby_particles:
+                                part_pos = Vector2(part_pos)
+                                dist = Vector2(part_pos - pos).magnitude()
                                 if dist < min_dist:
                                     min_dist = dist
-                                    closest_part = particle
-
-                            min_dist = min_dist
+                                    closest_part = color
 
                             intensity = 1
                             if min_dist != 0:
                                 intensity = 100 / (min_dist ** 2)
 
-                            color = [closest_part.color[i] for i in range(3)] + [min(255, 255 // 8 * intensity)]
+                            color = [closest_part[i] for i in range(3)] + [min(255, 255 // 8 * intensity)]
                             # print(color)
                             bloom_surf.set_at((int(pos.x), int(pos.y)), color)
                             # win.set_at((int(pos.x), int(pos.y)), (255, 0, 0))
@@ -187,12 +200,21 @@ def screensaver():
             win.blit(bloom_surf, (0, 0))
 
         win.blit(surf.generate_text(f"Particle count: {len(particles)}\n"
-                                    f"fps: {1/max(deltas):.2f} < {1/avg_delta:.2f} < {1/min(deltas):.2f}",
+                                    f"fps: {1/max(deltas):.2f} < {1/avg_delta:.2f} < {1/min(deltas):.2f}\n"
+                                    f"render time: {tim.time() - render_time:03.3f}",
                                     spacing=15), (0, 0))
 
         if not paused and recording:
             pygame.image.save(win, f"{recording}/frame_{frames:010}.png")
+
+        if not paused and logging:
+            byte_file = open(f"bins/particles_{frames:06}.dat", "wb")
+            pickle.dump(particle_map, byte_file)
+            byte_file.close()
+
+        if not paused and (recording or logging):
             frames += 1
+
 
         pygame.display.update()
 
