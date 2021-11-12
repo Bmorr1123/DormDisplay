@@ -1,6 +1,6 @@
 # main.py
 # Ben Morrison
-import os, time as tim
+import os, time
 
 import pygame, math, random, pygame.gfxdraw
 from random import randint, random
@@ -12,42 +12,47 @@ from pprint import pprint as pp
 from PIL import Image
 import glob
 
-# Imports for mp
-import pickle
-
 # Pygame setup and application stuff
 game_name = "DVD Logo"
 pygame.init()
 display, clock = pygame.display.Info(), pygame.time.Clock()
-width, height = display.current_w // 2, display.current_h // 2
+width, height = display.current_w, display.current_h
 center_x, center_y = width // 2, height // 2
-win = pygame.display.set_mode((width, height))
-pygame.display.set_caption(f"{game_name} {width}x{height}")
+win = pygame.display.set_mode((width, height), pygame.HWSURFACE | pygame.DOUBLEBUF)
+pygame.display.set_caption(game_name)
 
 
 # Functions
 def screensaver():
     # Setting up loop variables
-    running, paused, time, frames = True, False, 0, 0
+    running, paused, total_time, frames = True, False, 0, 0
     deltas = [.1 for _ in range(10)]
 
     # Load data
     particles = []
-    bouncer = Bouncer((center_x, center_y), Vector2(width - randint(0, 100), height - randint(0, 100)) / 10, "uah_logo.png")
+    bouncer = Bouncer((center_x, center_y), (0, 0), "uah_logo.png")
+    velocity = (Vector2(width, height) - bouncer.get_br_corner()) / 5
+
+    velocity.x *= (-1) ** randint(0, 1)
+    velocity.y *= (-1) ** randint(0, 1)
+
+    bouncer.velocity = velocity
+    # Vector2(width - randint(0, 100), height - randint(0, 100)) / 10
 
     draw_bloom, recording = False, None
-    logging = False
-    partition_size = 20
-
-    neighborhood_size = 5
+    partition_size, neighborhood_size = 20, 3
     neighborhood = []
     for y in range(neighborhood_size):
         for x in range(neighborhood_size):
-            neighborhood.append((x - neighborhood_size//2, y - neighborhood_size//2))
+            neighborhood.append((x - neighborhood_size // 2, y - neighborhood_size // 2))
 
     while running:
         delta = clock.tick(60) / 1000
-        delta = 1 / 60
+        if recording:
+            delta = 1 / 60
+
+        delta = min(delta, 1/15)
+
         # Event handling
         events = pygame.event.get()
         for event in events:
@@ -65,14 +70,20 @@ def screensaver():
                     return 0
                 elif key == pygame.K_SPACE:
                     # (self, position, velocity, size, explosion_time, explosion_size, acceleration, particles, color_generator=None, tier=0)
-                    for i in range(1):
+                    for i in range(5):
                         speed = 150 + 50 * (random() - .5)
-                        angle = random() * math.pi / 2 + math.pi / 4
+                        angle = random() * math.pi / 4 + 3 * math.pi / 4 * randint(0, 1)
+                        explosion_height = height * random() * .75
+
+                        fx = 1
+                        if angle > math.pi / 2:
+                            fx = width - 1
+
                         particles.append(Firework(
-                            (width * random(), height - 1),
-                            (speed * math.cos(angle), -speed * math.sin(angle)),
-                            25, 2 + random() * 2, int(50 + 25 * random()),
-                            150,  # normally 300
+                            (fx, height * random()),
+                            (4 * speed * math.cos(angle), 2 * -speed * math.sin(angle)),
+                            2 + random() * 2, 0, int(50 + 25 * random()),
+                            0,  # normally 300
                             particles, None, 0
                         ))
                 elif key == pygame.K_b:
@@ -81,11 +92,13 @@ def screensaver():
                     if not recording:
                         frames = 0
                         recording = "recordings\\" + "".join(["abcdefghijklmnopqrstuvwxyz"[randint(0, 25)] for _ in range(10)])
-                        os.mkdir(recording)
+                        if "frames" in os.listdir("recordings"):
+                            os.rmdir("recordings/frames")
+                            os.mkdir("recordings/frames")
                     else:
                         # Load up the frames
                         frames = []
-                        imgs = glob.glob(f"{recording}/*.png")
+                        imgs = glob.glob(f"recordings/frames/*.png")
                         for i in imgs:
                             new_frame = Image.open(i)
                             frames.append(new_frame)
@@ -98,15 +111,13 @@ def screensaver():
                                        duration=16, loop=1, quality=90)
 
                         # Remove the old frames
-                        for i in imgs:
-                            os.remove(i)
+                        # for i in imgs:
+                        #     os.remove(i)
 
                         # Remove the empty frames directory
-                        os.rmdir(recording)
+                        # os.rmdir(recording)
 
                         recording = None
-                elif key == pygame.K_F11:
-                    logging = not logging
 
             elif event.type == pygame.KEYDOWN:
                 pass
@@ -117,7 +128,7 @@ def screensaver():
         avg_delta = sum(deltas) / 10
 
         if not paused:
-            time += delta
+            total_time += delta
             for particle in particles:
                 particle.tick(delta)
                 pos = particle.position
@@ -133,88 +144,44 @@ def screensaver():
                     particles.pop(i)
                 else:
                     i += 1
-            bouncer.tick(delta)
+
+            if bouncer.tick(delta):
+                for i in range(5):
+                    speed = 150 + 50 * (random() - .5)
+                    angle = random() * math.pi / 2 + math.pi / 4
+                    explosion_height = height * random() * .75
+
+                    particles.append(Firework(
+                        (width * random(), height - 1),
+                        (speed * math.cos(angle), 6 * -speed * math.sin(angle)),
+                        25, explosion_height, int(50 + 25 * random()),
+                        150,  # normally 300
+                        particles, None, 0
+                    ))
 
         # Drawing
-        render_time = tim.time()
+        render_time = time.time()
         win.fill((0, 0, 50))
-        # win.blit(bouncer.surf, bouncer.position)
+        win.blit(bouncer.surf, bouncer.position)
 
-        particle_map = [[[] for _ in range(height // partition_size)] for _ in range(width // partition_size)]
         for particle in particles:
-            win.blit(particle.surf, particle.position)
+            # for i in range(10):
+            #     win.blit(particle.color_generator.get_bloom(i/10), particle.position + (i * 25, 0))
+            bloom = particle.get_bloom()
+            if bloom:
+                win.blit(bloom, particle.position - Vector2(bloom.get_size()) / 2)
+            else:
+                win.blit(particle.surf, particle.position - Vector2(particle.size) / 2)
 
-            # Bloom stuff
-            pos = particle.position + (particle.size / 2)
-
-            if 0 <= pos.x < width and 0 <= pos.y < height:
-                particle_map[int(pos.x // partition_size)][int(pos.y // partition_size)].append(
-                    [[int(pos.x * 100) / 100, int(pos.y * 100) / 100], [int(value * 100) / 100 for value in particle.color]]
-                )
-        # print("-----------------------------------------------")
-        # print(",\n".join([str(ele) for ele in particle_map]))
-        # ---------------------------------------------------------------------------------------------------- Bloom ---
-
-        if draw_bloom:
-            bloom_surf = pygame.Surface((width, height), pygame.SRCALPHA)
-            # print("-----------------------------------")
-            # print(",\n".join(f"[{', '.join([str(ele2) for ele2 in ele])}]" for ele in pygame.surfarray.pixels3d(bloom_surf)))
-            p_width, p_height = int(width // partition_size), int(height // partition_size)
-
-            # Looping through each partition L -> R then T -> B
-            for partition_y in range(p_height):
-                for partition_x in range(p_width):
-                    nearby_particles = []
-                    nearby_particles += particle_map[partition_x][partition_y]
-                    # Grabbing neighboring partitions
-                    for x, y in neighborhood:
-                        if 0 <= partition_x + x < p_width and 0 <= partition_y + y < p_height:
-                            nearby_particles += particle_map[partition_x + x][partition_y + y]
-
-                    if not nearby_particles:
-                        continue
-
-                    # Looping over each particle within the partition
-                    for x in range(partition_size):
-                        for y in range(partition_size):
-                            pos = Vector2(partition_x * partition_size + x, partition_y * partition_size + y)
-
-                            # Finding minimum distance from a particle
-                            min_dist, closest_part = width, None
-                            for part_pos, color in nearby_particles:
-                                part_pos = Vector2(part_pos)
-                                dist = Vector2(part_pos - pos).magnitude()
-                                if dist < min_dist:
-                                    min_dist = dist
-                                    closest_part = color
-
-                            intensity = 1
-                            if min_dist != 0:
-                                intensity = 100 / (min_dist ** 2)
-
-                            color = [closest_part[i] for i in range(3)] + [min(255, 255 // 8 * intensity)]
-                            # print(color)
-                            bloom_surf.set_at((int(pos.x), int(pos.y)), color)
-                            # win.set_at((int(pos.x), int(pos.y)), (255, 0, 0))
-
-            win.blit(bloom_surf, (0, 0))
 
         win.blit(surf.generate_text(f"Particle count: {len(particles)}\n"
-                                    f"fps: {1/max(deltas):.2f} < {1/avg_delta:.2f} < {1/min(deltas):.2f}\n"
-                                    f"render time: {tim.time() - render_time:03.3f}",
+                                    f"fps: {1 / max(deltas):.2f} < {1 / avg_delta:.2f} < {1 / min(deltas):.2f}\n"
+                                    f"render time: {time.time() - render_time:03.3f}",
                                     spacing=15), (0, 0))
 
         if not paused and recording:
-            pygame.image.save(win, f"{recording}/frame_{frames:010}.png")
-
-        if not paused and logging:
-            byte_file = open(f"bins/particles_{frames:06}.dat", "wb")
-            pickle.dump(particle_map, byte_file)
-            byte_file.close()
-
-        if not paused and (recording or logging):
+            pygame.image.save(win, f"recordings/frames/frame_{frames:010}.png")
             frames += 1
-
 
         pygame.display.update()
 
